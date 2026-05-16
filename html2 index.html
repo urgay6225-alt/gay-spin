@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>盖伊测试</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f7f7f7;
+            font-family: Arial, sans-serif;
+            background-position: center;
+            background-size: cover;
+            background-repeat: no-repeat;
+            opacity: 1; 
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* 使用伪元素作为独立的背景层，只对这个层做动画，绝对不影响轮盘 */
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-position: center;
+            background-size: cover;
+            background-repeat: no-repeat;
+            opacity: 0; /* 初始完全透明 */
+            transition: opacity 1.5s ease-out; /* 使用 CSS 过渡实现极其丝滑的缓缓淡入 */
+            z-index: -1; /* 严格保证在所有内容（转盘、字）的最底层 */
+        }
+
+        /* 当激活 show-bg 时，只有背景层缓缓变现 */
+        body.show-bg::before {
+            opacity: 1;
+        }
+
+        .wheel-container {
+            position: relative;
+            width: 400px;
+            height: 400px;
+            /* 增加半透明白色背板，防止背景图太花导致看不清转盘 */
+            background: rgba(255, 255, 255, 0.4);
+            padding: 10px;
+            border-radius: 50%;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+            z-index: 10; /* 确保轮盘浮在动画背景层之上 */
+        }
+
+        /* 绘制中心指针 */
+        .pointer {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 40px;
+            height: 40px;
+            background-color: #ff3366;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            z-index: 11; /* 指针在轮盘之上 */
+        }
+
+        /* 指针的箭头 - 已修改样式使其固定在转盘正上方最顶部，并向下指 */
+        .pointer::after {
+            content: '';
+            position: absolute;
+            top: -210px; /* 从中心往上移到大转盘外边缘 */
+            left: 50%;
+            transform: translateX(-50%);
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-top: 30px solid #ff33d3; /* 改为上边框，让箭头朝下指着转盘 */
+        }
+
+        canvas {
+            border-radius: 50%;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            background: #fff;
+            display: block; /* 确保 canvas 不会有奇怪的间距 */
+        }
+
+        #result {
+            margin-top: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            height: 35px;
+            /* 给文字加一点阴影，防止背景太亮时看不清字 */
+            text-shadow: 0 2px 4px rgba(255, 255, 255, 0.8), 0 -2px 4px rgba(255, 255, 255, 0.8);
+            background: rgba(255, 255, 255, 0.7);
+            padding: 5px 20px;
+            border-radius: 20px;
+            z-index: 10; /* 确保 elegant 结果文字也浮在背景之上 */
+            position: relative; /* 配合 z-index */
+        }
+    </style>
+</head>
+<body>
+
+    <div class="wheel-container">
+        <div class="pointer" id="spinBtn"></div>
+        <canvas id="wheelCanvas" width="400" height="400"></canvas>
+    </div>
+    <div id="result"></div>
+
+    <script>
+        const canvas = document.getElementById('wheelCanvas');
+        const ctx = canvas.getContext('2d');
+        const spinBtn = document.getElementById('spinBtn');
+        const resultDiv = document.getElementById('result');
+
+        // 1. 配置奖品数据与对应的背景图片路径
+        const prizes = [
+            { text: 'GIGA CHAD', color: '#ff9999', bg: 'OIP.webp' },
+            { text: '谢谢参与', color: '#ffffff', bg: 'monkey-memes-2022-1.jpeg' },
+            { text: '大GAY', color: '#99ccff', bg: 'Screenshot 2026-05-16 201955.jpg' },
+            { text: '谢谢参与', color: '#ffffff', bg: 'monkey-memes-2022-1.jpeg' },
+            { text: 'LGBT SPONSER', color: '#ffcc99', bg: 'OIP.jpeg' }, // 这里已经加上指定的图片
+            { text: '谢谢参与', color: '#ffffff', bg: 'monkey-memes-2022-1.jpeg' },
+            { text: 'GAY', color: '#ffff99', bg: '868195665.webp' },
+            { text: '谢谢参与', color: '#ffffff', bg: 'monkey-memes-2022-1.jpeg' }
+        ];
+
+        const numSegments = prizes.length;
+        const segmentAngle = (2 * Math.PI) / numSegments; 
+        let currentAngle = 0; 
+        let isSpinning = false;
+
+        // 2. 绘制轮盘
+        function drawWheel() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const radius = canvas.width / 2;
+            ctx.save();
+            ctx.translate(radius, radius);
+            ctx.rotate(currentAngle);
+
+            for (let i = 0; i < numSegments; i++) {
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, radius, i * segmentAngle, (i + 1) * segmentAngle);
+                ctx.fillStyle = prizes[i].color;
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#e0e0e0';
+                ctx.stroke();
+
+                ctx.save();
+                ctx.fillStyle = '#333333';
+                ctx.font = 'bold 14px Arial';
+                ctx.rotate(i * segmentAngle + segmentAngle / 2);
+                ctx.textAlign = 'right';
+                ctx.fillText(prizes[i].text, radius - 30, 5);
+                ctx.restore();
+            }
+            ctx.restore();
+        }
+
+        drawWheel();
+
+        // 3. 核心旋转逻辑
+        spinBtn.addEventListener('click', () => {
+            if (isSpinning) return; 
+            isSpinning = true;
+            resultDiv.innerText = '正在抽奖...';
+            
+            // 👈 核心修复：每次点击抽奖时，立刻把上一次的 show-bg 类去掉，让背景层透明隐藏
+            document.body.classList.remove('show-bg');
+
+            const prizeIndex = Math.floor(Math.random() * numSegments);
+            
+            // 后方增加了 - (Math.PI / 2)，完美校准正上方最顶部的判定点
+            const targetAngle = (2 * Math.PI) - (prizeIndex * segmentAngle + segmentAngle / 2) - (Math.PI / 2);
+            
+            const baseRotations = (5 + Math.floor(Math.random() * 3)) * 2 * Math.PI;
+            const finalAngle = baseRotations + targetAngle;
+
+            const duration = 4000; 
+            const startTime = performance.now();
+            const startAngle = currentAngle % (2 * Math.PI); 
+
+            function easeOutCubic(t) {
+                return 1 - Math.pow(1 - t, 3);
+            }
+
+            function animate(now) {
+                const elapsed = now - startTime;
+                const progress = Math.min(elapsed / duration, 1); 
+
+                const easedProgress = easeOutCubic(progress);
+                currentAngle = startAngle + easedProgress * (finalAngle - startAngle);
+
+                drawWheel();
+
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    isSpinning = false;
+                    const winningPrize = prizes[prizeIndex];
+                    resultDiv.innerText = `🎉 恭喜获得：${winningPrize.text}！`;
+
+                    // 【核心修改】将图片直接以通过设置 CSS 变量或动态创建规则的方式，赋予独立工作的伪元素
+                    if (winningPrize.bg) {
+                        // 建立一个临时的内部样式，把中奖图片极其精准地单塞给 body::before，不沾染 body 实体
+                        let styleTag = document.getElementById('dynamic-bg-style');
+                        if (!styleTag) {
+                            styleTag = document.createElement('style');
+                            styleTag.id = 'dynamic-bg-style';
+                            document.head.appendChild(styleTag);
+                        }
+                        styleTag.innerHTML = `body::before { background-image: url('${winningPrize.bg}'); }`;
+                        
+                        // 👈 唤醒伪元素，执行 1.5 秒从透明到显现的缓缓淡入。大转盘等内容被 z-index 护体，绝对静止不动！
+                        document.body.classList.add('show-bg'); 
+                    } else {
+                        document.body.classList.remove('show-bg');
+                    }
+                }
+            }
+
+            requestAnimationFrame(animate);
+        });
+    </script>
+</body>
+</html>
